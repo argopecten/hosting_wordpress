@@ -8,6 +8,6 @@
 class hosting_wpplatform_handler_field_sites extends views_handler_field {
   function render($values) {
     $value = $values->{$this->field_alias};
-    return hosting_wpsite_count($value, array(HOSTING_SITE_ENABLED, HOSTING_SITE_DISABLED, HOSTING_SITE_QUEUED));
+    return hosting_wpsite_count($value, array(HOSTING_WPSITE_ENABLED, HOSTING_WPSITE_DISABLED, HOSTING_WPSITE_QUEUED));
   }
 }

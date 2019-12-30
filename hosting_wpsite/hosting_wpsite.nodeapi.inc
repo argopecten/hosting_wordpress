@@ -11,7 +11,7 @@
 function hosting_wpsite_node_info() {
   $types["wpsite"] = array(
     "type" => 'wpsite',
-    "name" => 'Site',
+    "name" => 'WP Site',
     'base' => 'hosting_wpsite',
     "has_title" => TRUE,
     "title_label" => 'Domain name',
@@ -28,8 +28,8 @@ function hosting_wpsite_node_info() {
  */
 function hosting_wpsite_view(&$node, $teaser = FALSE) {
   hosting_set_breadcrumb($node);
-  $node->content['info']['#prefix'] = '<div id="hosting-wpsite-info" class="hosting-info-list">';
-  if ($node->wpsite_status == HOSTING_SITE_ENABLED) {
+  $node->content['info']['#prefix'] = '<div id="hosting-site-info" class="hosting-info-list">';
+  if ($node->wpsite_status == HOSTING_WPSITE_ENABLED) {
     $node->content['info']['link'] = array(
       '#markup' => _hosting_wpsite_goto_link($node),
       '#weight' => -10,
@@ -53,7 +53,7 @@ function hosting_wpsite_view(&$node, $teaser = FALSE) {
 
   $node->content['info']['wpplatform'] = array(
     '#type' => 'item',
-    '#title' => t('Platform'),
+    '#title' => t('WP Platform'),
     '#markup' => _hosting_node_link($node->wpplatform),
   );
 
@@ -144,8 +144,7 @@ function hosting_wpsite_delete($node) {
  * Implements hook_nodeapi().
  */
 function hosting_wpsite_nodeapi_wpsite_presave(&$node) {
-  // Domain names are case-insensitive.
-  $node->title = strtolower(trim($node->title));
+  $node->title = hosting_site_get_domain($node->title);
 }
 
 /**

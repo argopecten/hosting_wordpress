@@ -12,7 +12,7 @@ function hosting_hosting_wpsite_context_options(&$task) {
   $task->context_options['db_server'] = hosting_context_name($task->ref->db_server);
   $task->context_options['wpplatform'] = hosting_context_name($task->ref->wpplatform);
 
-  $task->context_options['uri'] = strtolower(trim($task->ref->title));
+  $task->context_options['uri'] = hosting_site_get_domain($task->ref->title);
   $task->context_options['language'] = $task->ref->wpsite_language;
 
   $task->context_options['type'] = $task->ref->type;
@@ -33,7 +33,9 @@ function hosting_hosting_wpsite_context_options(&$task) {
  */
 function hosting_wpsite_drush_context_import($context, &$node) {
   if ($context->type == 'wpsite') {
-    $node->title = strtolower(trim($context->uri)); // force lowercase for existing uri
+    if (!isset($node->title)) {
+      $node->title = hosting_site_get_domain($context->uri); // force lowercase for existing uri
+    }
     $node->wpsite_language = $context->language;
     $node->cron_key = $context->cron_key;
     $node->db_server = hosting_drush_import($context->db_server->name);
@@ -58,13 +60,14 @@ function hosting_wpsite_drush_context_import($context, &$node) {
         }
       }
     }
-*/
 
     // Log an error if there is still no profile.
     if (!$profile) {
       drush_set_error("HOSTING_WPSITE_IMPORT_ERROR", dt("Could not find the Profile !profile for Platfrom ID !platform", array('!profile' => $context->profile, '!platform' => $node->platform)));
     }
     $node->profile = $profile->package_id;
+*/
+    $node->profile = "wordpress";
 
     $client = node_load(HOSTING_DEFAULT_CLIENT);
     if ($context->client_name) {
@@ -79,9 +82,9 @@ function hosting_wpsite_drush_context_import($context, &$node) {
  * Map values of wpsite node into command line arguments
  */
 function drush_hosting_wpsite_pre_hosting_task($task) {
-  // FIXME This is not implemented yet.
-  // It should also check whether the site is a wpsite.
-  return;
+/* FIXME
+ * This is not implemented yet.
+ * It should also check whether the site is a wpsite.
 
   $task = &drush_get_context('HOSTING_TASK');
 
@@ -98,7 +101,8 @@ function drush_hosting_wpsite_pre_hosting_task($task) {
     }
     $task->args[1] = implode(',', $backups);
   }
-
+ */
+  return;
 }
 
 
@@ -234,9 +238,10 @@ function hosting_wpsite_post_hosting_wordpress_import_task($task, $data) {
   $task->ref->db_name = $data['self']['db_name'];
   node_save($task->ref);
 
-  $packages = $data['context']['packages'];
-  hosting_package_sync($packages);
-  hosting_package_instance_sync($task->ref->nid, $task->ref->type, $packages);
+  # TODO: not supported for now (we do not manage wp themes/plugins)
+  # $packages = $data['context']['packages'];
+  # hosting_package_sync($packages);
+  # hosting_package_instance_sync($task->ref->nid, $task->ref->type, $packages);
 
 }
 

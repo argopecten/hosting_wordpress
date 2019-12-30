@@ -1,7 +1,7 @@
 (function($) {
 
 // Setup our namespace.
-Drupal.hosting = Drupal.hosting || {};
+Drupal.hosting = Drupal.hosting_wpsite || {};
 // Obey the Drupal JS killswitch, almost entirely pointless though.
 if (Drupal.jsEnabled) {
   $(document).ready(function() {

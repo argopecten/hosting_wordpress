@@ -71,6 +71,13 @@ function hosting_wpsite_menu() {
     'access arguments' => array('access content'),
   );
 
+  // Provide autocomplete functionality.
+  $items['hosting/wpsites/autocomplete'] = array(
+    'title' => 'Autocomplete for WP sites',
+    'page callback' => 'hosting_wpsite_autocomplete_sites',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
 
   $items['node/%node/goto_wpsite'] = array(
     'page callback' => 'hosting_wpsite_goto',
@@ -117,6 +124,38 @@ function _hosting_wpsite_form_check() {
 }
 
 /**
+ * Retrieve autocomplete suggestions for site names.
+ *
+ * @param $string
+ *   The typed string so far, as typed in by the user.
+ *
+ * @return
+ *   A list of matching sites in JSON format.
+ */
+function hosting_wpsite_autocomplete_sites($string) {
+
+  // Fetch the list of matching active sites. Don't use EntityFieldQuery here
+  // as we'd have to load the nodes afterwards to get the field data. db_query()
+  // is much faster as we can get away with only one DB query overall.
+  $query = db_select('node', 'n');
+  $query->join('hosting_wpsite', 's', 's.nid = n.nid');
+  $results = $query->fields('n', array('nid', 'title'))
+    ->condition('n.type', 'wpsite')
+    ->condition('n.title', '%' . db_like($string) . '%', 'LIKE')
+    ->condition('s.status', HOSTING_WPSITE_DELETED, '!=')
+    ->execute();
+
+  // Save each result to the list.
+  $matches = array();
+  foreach ($results as $row) {
+    $matches[$row->title] = check_plain($row->title);
+  }
+
+  // Return the results as a JSON list.
+  drupal_json_output($matches);
+}
+
+/**
  * Menu wildcard loader callback.
  *
  * Loads a hosting_site node.
@@ -146,7 +185,7 @@ function hosting_wpsite_wildcard_load($arg) {
 function _hosting_wpsite_goto_link($node) {
   $cache = cache_get("hosting:wpsite:" . $node->nid . ":login_link");
   if (user_access('create login-reset task') && $cache && (REQUEST_TIME < $cache->data['expire'])) {
-    $title = t("Log in to !url", array('!url' => $node->title));
+    $title = t("Log in to !url", array('!url' => hosting_wpsite_canonical_url($node)));
   }
   else {
     $title = t("Go to !url", array('!url' => $node->title));
@@ -202,7 +241,7 @@ function _hosting_wpsite_url($node) {
   $schema = 'http';
   $port = NULL;
 
-  $url = strtolower(trim($node->title));
+  $url = hosting_wpsite_canonical_url($node);
 
   $platform = node_load($node->wpplatform);
   $server = node_load($platform->web_server);
@@ -214,12 +253,13 @@ function _hosting_wpsite_url($node) {
     }
   }
 
-  /**
-   * This is part of the ssl feature, but is better to implement here.
-   */
-  if (isset($node->ssl_enabled) && ($node->ssl_enabled == 2)) {
-    // this is a bit of a magic number, because we cant rely on the constant being available yet.
-    // 2 == Only SSL is enabled.
+  // This is part of the ssl feature, but is better to implement here.
+  // The 2 is a bit of a magic number, because we cant rely on the constants being available yet.
+  // 2 == Only SSL is required, corresponding to HOSTING_SSL_REQUIRED and HOSTING_HTTPS_REQUIRED.
+  $hosting_ssl_required = (isset($node->ssl_enabled) && $node->ssl_enabled == 2);
+  $hosting_https_required = (isset($node->https_enabled) && $node->https_enabled == 2);
+
+  if ($hosting_ssl_required || $hosting_https_required) {
     $schema = 'https';
 
     if ($server->services['http']->has_port()) {
@@ -235,6 +275,17 @@ function _hosting_wpsite_url($node) {
   }
 
   return "{$schema}://{$url}";
+}
+
+/**
+ * Get a site's canonical URL.
+ */
+function hosting_wpsite_canonical_url($node) {
+  # Use the redirection target, if it's available.
+  # Default to the site title, otherwise.
+  $url = isset($node->redirection) && $node->redirection ? $node->redirection : $node->title;
+
+  return hosting_site_clean_domain($url);
 }
 
 /**
@@ -511,14 +562,30 @@ function hosting_get_wpsites_by_status($wpplatform, $status) {
 }
 
 /**
- * Retrieve a node based on the url
+ * Retrieves a site node based on the URL.
+ *
+ * @param string $url
+ *   The URL of the site.
+ * @param boolean $loaded_object
+ *   Determines if a loaded site should be returned, or just the node ID.
+ *   Defaults to TRUE.
+ * @return
+ *   If $loaded_object is TRUE, a fully loaded site node object.
+ *   If $loaded_object is FALSE, the node ID of the site.
+ *   In either case, if the site can't be found, FALSE is returned.
+ * @todo
+ *   Remove the db_query() and have only one EntityFieldQuery. The two
+ *   different cases will be handled by adding different conditions/tags to it.
+ *   A new tag will have to be added to match the title for aliases. These tags
+ *   won't be necessary in Drupal 8 as JOINs are natively supported. See
+ *   https://www.drupal.org/node/1882418 for details.
  */
-function hosting_get_wpsite_by_url($url) {
+function hosting_get_wpsite_by_url($url, $loaded_object = TRUE) {
   // If the Aliases feature is enabled, try and get the site by its alias too
   if (hosting_feature('alias')) {
     $nid = db_query("SELECT n.nid
                        FROM {node} n
-                       JOIN {hosting_site} h
+                       JOIN {hosting_wpsite} h
                          ON n.nid = h.nid
                   LEFT JOIN {hosting_wpsite_alias} ha
                          ON h.vid = ha.vid
@@ -533,21 +600,28 @@ function hosting_get_wpsite_by_url($url) {
                     ))->fetchField();
   }
   else {
-    $nid = db_query("SELECT n.nid
-                       FROM {node} n
-                       JOIN {hosting_site} h
-                         ON n.nid = h.nid
-                      WHERE n.title = :title
-                        AND n.type = :type
-                        AND NOT (h.status = :status)",
-                    array(
-                      ':title' => $url,
-                      ':type' => 'site',
-                      ':status' => HOSTING_WPSITE_DELETED,
-                    ))->fetchField();
+    // Get the list of node IDs whose title matches the name.
+    $query = new EntityFieldQuery();
+    $entities = $query->entityCondition('entity_type', 'node')
+      ->propertyCondition('type', 'wpsite')
+      ->propertyCondition('title', $url)
+      ->addTag('site_not_deleted')
+      ->range(0, 1)
+      ->execute();
+
+    // Get the ID of the single node, if there is one.
+    if (!empty($entities['node'])) {
+      // Fetch the node ID from the list and return it.
+      $nids = array_keys($entities['node']);
+      $nid = array_shift($nids);
+    }
+    else {
+      $nid = FALSE;
+    }
+
   }
   if ($nid) {
-    return node_load($nid);
+    return $loaded_object ? node_load($nid) : $nid;
   }
   return FALSE;
 }
@@ -631,6 +705,15 @@ function _hosting_wpsite_status($node) {
 }
 
 /**
+ * Site status codes to human readable label mappings.
+ *
+ * @see hosting_site_status_codes
+ */
+function hosting_wpsite_status_codes_labels() {
+  return hosting_wpsite_status_codes('label');
+}
+
+/**
  * Define the status type labels and classes.
  *
  * @param $type
@@ -681,8 +764,8 @@ function hosting_wpsite_status_codes($type = NULL) {
  */
 function hosting_wpsite_allow_domain($url, $params = array()) {
   $query = "SELECT COUNT(n.nid) FROM {node} n
-    JOIN {hosting_site} h ON n.nid = h.nid
-    WHERE type = 'site' AND n.title = :title AND h.status <> :status";
+    JOIN {hosting_wpsite} h ON n.nid = h.nid
+    WHERE type = 'wpsite' AND n.title = :title AND h.status <> :status";
   $args[':title'] = $url;
   $args[':status'] = HOSTING_WPSITE_DELETED;
 
@@ -734,6 +817,15 @@ function theme_hosting_wpsite_profile($variables) {
     return "{$variables['profile']->title} <em>({$variables['profile']->short_name})</em>";
   }
   return "{$variables['profile']->title} ({$variables['profile']->short_name})";
+}
+
+/**
+ * Theme function for site titles.
+ */
+function hosting_wpsite_preprocess(&$variables) {
+  if (isset($variables['node'])) {
+    $variables['title'] = hosting_wpsite_canonical_url($variables['node']);
+  }
 }
 
 /**

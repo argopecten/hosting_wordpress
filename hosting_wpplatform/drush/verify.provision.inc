@@ -9,7 +9,7 @@
  */
 function drush_provision_wordpress_provision_verify($url = NULL) {
   if (d()->type == 'wpplatform') {
-    drush_log(dt("WordPress: Running drush_wordpress_provision_verify on !type, name !name", array('!type' => d()->type, '!name' => d()->name)));
+    drush_log(dt("WordPress: Running drush_provision_wordpress_provision_verify on !type, name !name", array('!type' => d()->type, '!name' => d()->name)));
 
     provision_file()->exists(d()->root . '/wp-includes')
       ->succeed('Directory @path seems to be a WordPress installation.')
@@ -27,7 +27,7 @@ function drush_provision_wordpress_provision_verify($url = NULL) {
     # d()->service('http')->write();
   }
   elseif (d()->type == 'wpsite') {
-    drush_log(dt("WordPress: Running drush_wordpress_provision_verify on !type, name !name", array('!type' => d()->type, '!name' => d()->name)));
+    drush_log(dt("WordPress: Running drush_provision_wordpress_provision_verify on !type, name !name", array('!type' => d()->type, '!name' => d()->name)));
 
     d()->service_subscribe('server', '@server_master');
     d()->service_subscribe('http', '@server_master');

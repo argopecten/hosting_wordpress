@@ -23,11 +23,11 @@ function hosting_wpplatform_views_default_views() {
 
   /* Display: Defaults */
   $handler = $view->new_display('default', 'Defaults', 'default');
-  $handler->display->display_options['title'] = 'Platforms';
+  $handler->display->display_options['title'] = 'WP Platforms';
   $handler->display->display_options['use_ajax'] = TRUE;
   $handler->display->display_options['use_more_always'] = FALSE;
   $handler->display->display_options['access']['type'] = 'perm';
-  $handler->display->display_options['access']['perm'] = 'view platform';
+  $handler->display->display_options['access']['perm'] = 'view wpplatform';
   $handler->display->display_options['cache']['type'] = 'none';
   $handler->display->display_options['query']['type'] = 'views_query';
   $handler->display->display_options['exposed_form']['type'] = 'basic';
@@ -97,6 +97,7 @@ function hosting_wpplatform_views_default_views() {
   $handler->display->display_options['fields']['views_bulk_operations']['vbo_settings']['display_type'] = '0';
   $handler->display->display_options['fields']['views_bulk_operations']['vbo_settings']['enable_select_all_pages'] = 1;
   $handler->display->display_options['fields']['views_bulk_operations']['vbo_settings']['force_single'] = 0;
+  $handler->display->display_options['fields']['views_bulk_operations']['vbo_settings']['skip_batching'] = 1;
   $handler->display->display_options['fields']['views_bulk_operations']['vbo_settings']['entity_load_capacity'] = '10';
   $handler->display->display_options['fields']['views_bulk_operations']['vbo_operations'] = array(
     'action::node_assign_owner_action' => array(
@@ -252,7 +253,7 @@ function hosting_wpplatform_views_default_views() {
   $handler->display->display_options['fields']['title']['id'] = 'title';
   $handler->display->display_options['fields']['title']['table'] = 'node';
   $handler->display->display_options['fields']['title']['field'] = 'title';
-  $handler->display->display_options['fields']['title']['label'] = 'Platform';
+  $handler->display->display_options['fields']['title']['label'] = 'WP Platform';
   $handler->display->display_options['fields']['title']['element_class'] = 'hosting-status';
   /* Field: Hosting WP Platform: Release */
   $handler->display->display_options['fields']['release']['id'] = 'release';
@@ -307,7 +308,7 @@ function hosting_wpplatform_views_default_views() {
   $handler = $view->new_display('page', 'Page', 'page_platforms');
   $handler->display->display_options['defaults']['access'] = FALSE;
   $handler->display->display_options['access']['type'] = 'perm';
-  $handler->display->display_options['access']['perm'] = 'view platform';
+  $handler->display->display_options['access']['perm'] = 'view wpplatform';
   $handler->display->display_options['path'] = 'hosting/wpplatforms';
   $handler->display->display_options['menu']['type'] = 'normal';
   $handler->display->display_options['menu']['title'] = 'WP Platforms';

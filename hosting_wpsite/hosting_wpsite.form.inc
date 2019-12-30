@@ -13,11 +13,11 @@ function _hosting_wpsite_field(&$form, $node, $item, $element, $filter_display =
   $type = $element['#type'];
 
   if (!isset($node->nid) || $editable) {
-    // create it
-    if (($element['#type'] == 'radios') && !sizeof($element['#options'])) {
+    // Create it.
+    if (($element['#type'] == 'radios') && !count($element['#options'])) {
       $form[$item] = array(
-        '#type' => 'hidden',
-        '#value' => key($element['#options']),
+        '#type' => 'value',
+        '#value' => !empty($element['#default_value']) ? $element['#default_value'] : NULL,
       );
     }
     else {
@@ -25,9 +25,9 @@ function _hosting_wpsite_field(&$form, $node, $item, $element, $filter_display =
     }
 
     if ($show_desc) {
-      // the text to display when there are no valid options to select
+      // The text to display when there are no valid options to select.
       $form[$item . '_description'] = array(
-        '#prefix' => "<div class='hosting-wpsite-field-description' id='hosting-wpsite-field-{$css_id}-description'>",
+        '#prefix' => "<div class='hosting-site-field-description'>",
         '#suffix' => '</div>',
         '#type' => 'item',
         '#title' => $element['#title'],
@@ -43,7 +43,7 @@ function _hosting_wpsite_field(&$form, $node, $item, $element, $filter_display =
     $type = 'display';
 
     if ($show_desc) {
-      // display it
+      // Display it.
       $form['info'][$item] = array(
         '#type' => 'item',
         '#title' => $element['#title'],
@@ -62,9 +62,9 @@ function _hosting_wpsite_field(&$form, $node, $item, $element, $filter_display =
     );
   }
 
-  $form[$item]['#hosting_wpsite_field'] = $item;
-  $form[$item]['#hosting_wpsite_field_value'] = $element['#default_value'];
-  $form[$item]['#prefix'] = "<div class='hosting-wpsite-field hosting-wpsite-field-{$type}' id='hosting-wpsite-field-{$css_id}'>";
+  $form[$item]['#hosting_site_field'] = $item;
+  $form[$item]['#hosting_site_field_value'] = $element['#default_value'];
+  $form[$item]['#prefix'] = "<div class='hosting-site-field' id='hosting-site-field-{$css_id}'>";
   $form[$item]['#suffix'] = "</div>";
 }
 
@@ -84,7 +84,7 @@ function hosting_wpsite_available_options($node, $platform = NULL) {
 
   $return = array();
 
-  $return['profile'] = array();
+  // $return['profile'] = array();
   $return['platform'] = array();
   $return['wpsite_language'] = array();
 
@@ -95,22 +95,22 @@ function hosting_wpsite_available_options($node, $platform = NULL) {
     $return['client'] = NULL;
   }
 
-  // Load up the user we'll use to check platform and profile access
+  // Load up the user we'll use to check platform and profile access.
   $user = user_load($GLOBALS['user']->uid);
 
-  // Install profiles
+  // Install profiles.
   $profiles = hosting_get_profiles();
   $platform_profiles = array();
   foreach ($profiles as $id => $name) {
 
     // Trim down the list of profiles to those that are available and the user has access to
     // XXX This hack (next 22 lines) hides profiles that can't be accessed
-    // Eventually we should lighten up the content of this callback
+    // Eventually we should lighten up the content of this callback.
     $result = db_query("SELECT l.nid
                         FROM {hosting_package_instance} i
                         JOIN {hosting_package} p
                         ON p.nid = i.package_id
-                        JOIN {hosting_platform} l
+                        JOIN {hosting_wpplatform} l
                         ON l.nid = i.rid
                         WHERE i.package_id = :package_id
                         AND p.package_type = :package_type
@@ -118,7 +118,7 @@ function hosting_wpsite_available_options($node, $platform = NULL) {
                         array(
                           ':package_id' => $id,
                           ':package_type' => 'profile',
-                          ':status' => HOSTING_PLATFORM_ENABLED
+                          ':status' => HOSTING_PLATFORM_ENABLED,
                         )
                       );
     if (is_null($platform)) {
@@ -136,13 +136,13 @@ function hosting_wpsite_available_options($node, $platform = NULL) {
       elseif (array_key_exists($row->nid, $allowed_plats)) {
         $access_check = TRUE;
       }
-      // open access if no platform access has been set
+      // Open access if no platform access has been set.
       // @todo move this into _hosting_get_allowed_platforms
-      // @todo confirm this logic
+      // @todo confirm this logic.
       elseif (!$unrestricted = db_query("SELECT cid
                                          FROM {hosting_platform_client_access}
                                          WHERE pid = :pid LIMIT 1",
-                                         array(':pid' => $row['nid'])
+                                         array(':pid' => $row->nid)
                                        )->fetchField()) {
         $access_check = TRUE;
       }
@@ -161,7 +161,7 @@ function hosting_wpsite_available_options($node, $platform = NULL) {
     $node->profile = hosting_get_default_profile($return['profile'][0]);
   }
 
-  // filter the available platforms based on which clients the user has access to.
+  // Filter the available platforms based on which clients the user has access to.
   if (!is_null($platform)) {
     $node->profile = $return['profile'][0];
     $return['platform'] = array($platform);
@@ -169,12 +169,12 @@ function hosting_wpsite_available_options($node, $platform = NULL) {
   else {
     $options = array();
     $platforms = hosting_get_profile_platforms($node->profile, isset($node->check_profile_migrations) ? $node->check_profile_migrations : FALSE);
-    if (sizeof($platforms)) {
+    if (count($platforms)) {
       foreach ($platforms as $nid => $title) {
         $platform = node_load($nid);
 
-        if ($platform->platform_status != HOSTING_PLATFORM_LOCKED || user_access('create wpsites on locked platforms')) {
-          if (!isset($platform->clients) || sizeof(array_intersect(array_keys($user->client_id), $platform->clients)) || $user->uid == 1) {
+        if ($platform->platform_status != HOSTING_WPPLATFORM_LOCKED || user_access('create wpsites on locked platforms')) {
+          if (!isset($platform->clients) || count(array_intersect(array_keys($user->client_id), $platform->clients)) || $user->uid == 1) {
             $options[] = $nid;
           }
         }
@@ -189,6 +189,9 @@ function hosting_wpsite_available_options($node, $platform = NULL) {
   }
 
   $return['wpsite_language'] = array_keys((array) hosting_get_profile_languages($node->profile, $node->platform));
+
+  // na
+  $return['platform'] = _hosting_get_wpplatforms();
 
   drupal_alter('hosting_wpsite_options', $return, $node);
 
@@ -205,7 +208,7 @@ function hosting_wpsite_form($node, &$form_state) {
 
   if (isset($node->nid)) {
     $form['info'] = array(
-      '#prefix' => '<div class="clear-block" id="hosting-wpsite-edit-info">',
+      '#prefix' => '<div class="clear-block" id="hosting-site-edit-info">',
       '#suffix' => '<br /></div>',
       '#weight' => -10,
     );
@@ -215,7 +218,7 @@ function hosting_wpsite_form($node, &$form_state) {
     '#type' => 'textfield',
     '#title' => t('Domain name'),
     '#required' => TRUE,
-    '#default_value' => isset($node->title) ? strtolower(trim($node->title)) : '',
+    '#default_value' => isset($node->title) ? hosting_site_get_domain($node->title) : '',
     '#weight' => -10,
   ));
 
@@ -276,7 +279,7 @@ function hosting_wpsite_form($node, &$form_state) {
 
   _hosting_wpsite_field($form, $node, 'wpplatform', array(
     '#type' => 'radios',
-    '#title' => t('Platform'),
+    '#title' => t('WP Platform'),
     '#required' => TRUE,
     '#description' => t('The platform you want the wpsite to be hosted on.'),
     '#options' => $platforms,
@@ -327,10 +330,17 @@ function hosting_wpsite_form($node, &$form_state) {
   return $form;
 }
 
+
+/**
+ * Ajax callback for the site profile field.
+ */
 function hosting_wpsite_platform_callback($form, &$form_state){
   return $form['wpplatform'];
 }
 
+/**
+ * Ajax callback for the site platform field.
+ */
 function hosting_wpsite_language_callback($form, &$form_state){
   return $form['wpsite_language'];
 }
@@ -340,11 +350,12 @@ function hosting_wpsite_language_callback($form, &$form_state){
  */
 function hosting_wpsite_validate($node, &$form) {
   global $user;
-
   // FIXME TODO
   $valid_options = hosting_wpsite_available_options($node);
 
-  $url = strtolower(trim($node->title)); // domain names are case-insensitive
+  // Domain names are case-insensitive, set to lower case.
+  $url = hosting_site_get_domain($node->title);
+
   if (!_hosting_valid_fqdn($url)) {
     form_set_error('title', t("You have not specified a valid url for this wpsite."));
   }
@@ -398,7 +409,8 @@ function hosting_wpsite_validate($node, &$form) {
  * Hide the delete button on wpsite nodes
  */
 function hosting_wpsite_form_alter(&$form, &$form_state, $form_id) {
-  // Remove delete button from wpsite edit form, unless the wpsite's already been deleted via the Delete task
+  // Remove delete button from wpsite edit form, unless the site's already been
+  // deleted via the Delete task.
   if ($form_id == 'wpsite_node_form') {
     $node = $form['#node'];
     if (isset($node->wpsite_status) && $node->wpsite_status !== HOSTING_SITE_DELETED) {
@@ -409,4 +421,13 @@ function hosting_wpsite_form_alter(&$form, &$form_state, $form_id) {
     // Add our callback, so we can operate on the fully built form.
     $form['#after_build'][] = '_hosting_site_collapse_views_fieldset'; // FIXME wpsite?
   }
+
+  // On Delete task forms, if variable is set, set the --force option.
+  if ($form_id == 'hosting_task_confirm_form' && $form['task']['#value'] == 'delete' && variable_get('hosting_delete_force', FALSE)) {
+    $form['parameters']['force'] = array(
+      '#type' => 'value',
+      '#value' => 1,
+    );
+  }
+
 }

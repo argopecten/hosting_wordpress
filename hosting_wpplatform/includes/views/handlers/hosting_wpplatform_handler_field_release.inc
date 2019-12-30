@@ -1,7 +1,7 @@
 <?php
 
 /**
- * A handler for the Platform release field.
+ * A handler for the WP Platform release field.
  *
  * @ingroup views_field_handlers
  */

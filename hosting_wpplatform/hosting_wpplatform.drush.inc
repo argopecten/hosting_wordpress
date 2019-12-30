@@ -21,10 +21,6 @@ function hosting_hosting_wpplatform_context_options(&$task) {
   else {
     $task->context_options['make_working_copy'] = 'null';
   }
-
-  if (empty($task->ref->hosting_name)) {
-    $task->ref->hosting_name = hosting_context_name($task->ref->nid);
-  }
 }
 
 /**
@@ -32,8 +28,10 @@ function hosting_hosting_wpplatform_context_options(&$task) {
  */
 function hosting_wpplatform_drush_context_import($context, &$node) {
   if ($context->type == 'wpplatform') {
-    $node->title = str_replace('wpplatform_', '', trim($context->name, '@'));
-    $node->web_server = hosting_drush_import($context->web_server);
+    if (!isset($node->title)) {
+      $node->title = str_replace('wpplatform_', '', trim($context->name, '@'));
+    }
+    $node->web_server = hosting_context_nid($context->web_server);
     $node->publish_path = $context->root;
     $node->makefile = $context->makefile;
     if (isset($context->make_working_copy) && !empty($context->make_working_copy)) {
@@ -43,7 +41,7 @@ function hosting_wpplatform_drush_context_import($context, &$node) {
 }
 
 /**
- * Implements hook_post_verify().
+ * Implements hook_post_hosting_TASK_TYPE_task().
  *
  * Sets the wpplatform verified timestamp, to discren when it was verified.
  * Imports all the profiles and modules into package and package release nodes.
@@ -59,7 +57,8 @@ function hosting_wpplatform_post_hosting_verify_task($task, $data) {
       $node->wpplatform_status = HOSTING_WPPLATFORM_LOCKED;
     }
 
-    $node->verified = REQUEST_TIME; // set verified flag on wpplatform, to let it know it has been checked.
+    // Set verified flag on platform, to let it know it has been checked.
+    $node->verified = REQUEST_TIME;
 
     /**
      * If we are verifying a Locked wpplatform (i.e if the publish_path has changed),
@@ -87,23 +86,34 @@ function hosting_wpplatform_post_hosting_verify_task($task, $data) {
       // @todo : package instances of modules to profiles. <-- huh?
     }
 
-    foreach ($context['sites'] as $url) {
-      if (hosting_domain_allowed($url)) {
-        // Import any sites that have not been created yet.
-        $site = new stdClass();
-        $site->type = 'site';
-        $site->site_status = HOSTING_SITE_QUEUED;
-        $site->import = TRUE;
-        $site->title = $url;
-        $site->wpplatform = $node->nid;
-        $site->client = HOSTING_DEFAULT_CLIENT;
-        $site->db_server = HOSTING_DEFAULT_DB_SERVER;
-        node_save($site);
-        drush_log(dt("Imported existing site !domain", array('!domain' => _hosting_node_link($site->nid))));
-        hosting_package_instance_sync($site->nid, $site->type, $packages['base']);
+    // If configured to do so, import all sites found on this platform.
+    if (variable_get('hosting_wpplatform_automatic_site_import', TRUE)) {
+      foreach ($context['sites'] as $url) {
+        if (hosting_domain_allowed($url)) {
+          // Import any sites that have not been created yet.
+          $site = new stdClass();
+          $site->type = 'site';
+          $site->site_status = HOSTING_WPSITE_QUEUED;
+          $site->import = TRUE;
+          $site->title = $url;
+          $site->wpplatform = $node->nid;
+          $site->client = HOSTING_DEFAULT_CLIENT;
+          $site->db_server = HOSTING_DEFAULT_DB_SERVER;
+          node_save($site);
+          drush_log(dt("Imported existing site !domain", array('!domain' => _hosting_node_link($site->nid))));
+          hosting_package_instance_sync($site->nid, $site->type, $packages['base']);
+        }
       }
     }
 */
+  }
+
+  // When a server is verified, queue up a verify task for every platform.
+  if ($task->ref->type == 'server') {
+    $query = db_query("SELECT nid FROM {hosting_wpplatform} WHERE status <> :status AND web_server = :web_server", array(':status' => HOSTING_WPPLATFORM_DELETED, ':web_server' => $task->ref->nid));
+    while ($nid = $query->fetch()) {
+      hosting_add_task($nid->nid, 'verify');
+    }
   }
 }
 
@@ -148,4 +158,3 @@ function hosting_wpplatform_post_hosting_unlock_task($task, $data) {
   $task->ref->no_verify = TRUE;
   node_save($task->ref);
 }
-

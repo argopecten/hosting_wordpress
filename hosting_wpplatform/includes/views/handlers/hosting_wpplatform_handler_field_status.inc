@@ -1,7 +1,7 @@
 <?php
 
 /**
- * A handler for the Platform status field.
+ * A handler for the WP Platform status field.
  *
  * @ingroup views_field_handlers
  */
